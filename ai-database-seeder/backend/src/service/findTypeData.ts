@@ -36,7 +36,14 @@ CREATE TABLE orders (
 
 `;
 
+const schemSql2 = `
+  CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  email VARCHAR UNIQUE NOT NULL
+);
+`;
 const table = parse(schemaSql);
+const table2 = parse(schemSql2);
 
 const findTypeData = table.reduce((acc, curr) => {
   if (!acc[curr.name.name]) {
@@ -49,50 +56,45 @@ const findTypeData = table.reduce((acc, curr) => {
   }
 
   curr.columns.forEach((col) => {
-    col.constraints?.some((cons) => {
+    const constraints = col.constraints ?? [];
+    acc[curr.name.name].column.push({
+      columnName: col.name.name,
+      dataType: col.dataType.name,
+      constraint: {
+        primaryKey: constraints.some((cons) => cons.type === "primary key"),
+        unique: constraints.some(
+          (cons) => cons.type === "unique" || cons.type === "primary key",
+        ),
+        notNull: constraints.some(
+          (cons) => cons.type === "not null" || cons.type === "primary key",
+        ),
+      },
+    });
+    col.constraints.forEach((cons) => {
       if (cons.type === "primary key") {
         acc[curr.name.name].primaryKey.push(col.name.name);
       }
-      acc[curr.name.name].column.push({
-        columnName: col.name.name,
-        dataType: col.dataType.name,
-        constraint: {
-          primaryKey: cons.type === "primary key" ? true : false,
-          unique:
-            cons.type === "unique" || cons.type === "primary key"
-              ? true
-              : false,
-          notNull:
-            cons.type === "not null" || cons.type === "primary key"
-              ? true
-              : false,
-        },
-      });
-
-      if (curr.constraints?.some((col) => col.type === "foreign key")) {
+      if (cons.type === "reference") {
         acc[curr.name.name].foreignKeys.push({
-          columns: [col.localColumns[0].name],
-          referencedTable: col.foreignTable.name,
-          foreignColum: [col.foreignColumns[0].name],
-        });
-      }
-
-      if (
-        col?.some((constraints) =>
-          constraints?.some((reference) => reference.type === "reference"),
-        )
-      ) {
-        col.contraints?.some((refrences) => {
-          acc[curr.name.name].foreignKeys.push({
-            columns: [refrences.type],
-            referencedTable: refrences.foreignTable.name,
-            foreignColum: [refrences.foreignColumns[0].name],
-          });
+          columns: [col.name.name],
+          referencedTable: cons.foreignTable.name,
+          referencedColumns: [cons.foreignColumns[0].name],
         });
       }
     });
   });
 
+  if (
+    curr.constraints?.some((constraint) => constraint.type === "foreign key")
+  ) {
+    curr.constraints.forEach((col) => {
+      acc[curr.name.name].foreignKeys.push({
+        columns: [col.localColumns[0].name],
+        referencedTable: col.foreignTable.name,
+        referencedColumns: [col.foreignColumns[0].name],
+      });
+    });
+  }
   return acc;
 }, {});
 // console.dir(table, { depth: null });
